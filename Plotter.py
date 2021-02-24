@@ -602,8 +602,11 @@ class MDFPlotter:
         self.fig.canvas.mpl_connect("resize_event", self.onResize)
 
 def find_nearest_index_bisection(data_list, hook_value, eps=0.5):
-    idx = bisect.bisect(data_list, hook_value)
-    return idx
+    idx = bisect.bisect_right(data_list, hook_value)
+    if idx == 0 or idx == len(data_list) - 1:
+        return idx
+    else:
+        return idx-1
     if idx >= 0 and idx <= len(data_list) - 1 and data_list[idx] == hook_value:
         return idx
     neis = [float("inf"), float("inf"), float("inf")]
