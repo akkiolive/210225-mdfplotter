@@ -5,6 +5,7 @@ from matplotlib.gridspec import GridSpec
 from matplotlib.patches import Rectangle
 from MDFPlotConnect import connect
 from interactor import Interactor
+import bisect
 
 class Colors:
     def __init__(self, colors=None, subcolors=None):
@@ -102,6 +103,7 @@ class MDFPlotter:
         self.PlotSignalNames = []
         self.PlotSignalNum = 0
         self.PlotSignals = []
+        self.ValuesAtVCursor = []
         ## color
         self.Color = Colors()
         ### load
@@ -126,6 +128,7 @@ class MDFPlotter:
                             self.PlotSignalNames.append(signal_name)
                             self.PlotSignals.append(plot_signal)
                             self.PlotSignalNum += 1
+                            self.ValuesAtVCursor.append(None)
                         print(signal_name)
                 except:
                     if j == 0:
@@ -172,6 +175,7 @@ class MDFPlotter:
         ## set axes
         self.main_axes = []
         self.info_axes = []
+        self.info_value_texts = []
         self.make_axes()
 
         # set dummy vcursor
@@ -229,20 +233,27 @@ class MDFPlotter:
             signal = plot_signal.signal
             ax = self.main_axes[i]
             ax.step(signal.timestamps, signal.samples, where="post", color=plot_signal.color)
-        if xlim:
-            self.main_axes[-1].set_xlim(xlim)
-        self.xlim = list(self.main_axes[-1].get_xlim())
+        
         
         # info axes
         for ax in self.info_axes:
             ax.remove()
         self.info_axes = []
+        self.info_value_texts = []
+        self.ValuesAtVCursor = [None]*self.PlotSignalNum
         for i, plot_signal in enumerate(self.PlotSignals):
             ax = self.fig.add_subplot(gs[i+1, 0])
             self.info_axes.append(ax)            
             ax.annotate(plot_signal.name, xy=(1,1), size=10, horizontalalignment="right", va="top", color=plot_signal.color)
+            text = ax.annotate(str(self.ValuesAtVCursor[i]), xy=(1,0.5), ha="right", va="center", color=plot_signal.color)
+            self.info_value_texts.append(text)
+            text.set_visible(False)
         # anno ax
         self.anno_ax = self.fig.add_subplot(gs[1:-1, 1], sharex=self.foot_ax)
+        # lim
+        if xlim:
+            self.foot_ax.set_xlim(xlim)
+        self.xlim = list(self.main_axes[-1].get_xlim())
         # apply styles
         self.apply_styles()    
 
@@ -270,14 +281,56 @@ class MDFPlotter:
                 print(signal_name, "is not found(set_plot_signals)")
         self.make_axes(xlim=xlim)    
 
+    
+    def get_values_at_vcursor(self, refresh=True):
+        self.ValuesAtVCursor = []
+        for i, plot_signal in enumerate(self.PlotSignals):
+            signal = plot_signal.signal
+            idx = find_nearest_index_bisection(signal.timestamp, self.vcursor_x)
+            if idx:
+                value = signal.samples[idx]
+            else:
+                value = None
+            self.ValuesAtVCursor.append(value)
+        if refresh:
+            self.Refresh_InfoAx()
 
-            
+
+    def DrawRect(self, xy, width, height, fc="white", ec=None, lw=None, **kwargs):
+        # # xy must be the screen xy pixels of fig
+        # convert xy and w/h to xlim of bg_ax
+        ## get fig size
+        dpi = self.fig.get_dpi()
+        figwidth = self.fig.get_figwidth() * dpi
+        figheight = self.fig.get_figheight() * dpi
+        ## convert
+        xy_ = (
+            xy[0] / figwidth,
+            xy[1] / figheight
+        )
+        width_ = width / figwidth
+        height_ = height / figheight
+        # make rect
+        rect = Rectangle(xy=xy_, width=width_, height=height_, fc=fc, ec=ec, lw=lw, **kwargs)
+        # add to bg
+        self.bg_ax.add_patch(rect)
+        # drawing
+        self.fig.draw_artist(rect)
+        # remove rect from bg_ax
+        self.bg_ax.patches[-1].remove()
+    
     def LoadMDF(self, mdfpath):
         print("Loading", mdfpath, "...")
         self.mdfpath = mdfpath
         self.mdf = MDF(mdfpath)
         return self.mdf
 
+    def Clear_Arb(self, artist, blit=False):
+        bbox = artist.get_window_extent(self.fig.canvas.get_renderer())
+        self.DrawRect(xy=(bbox.x0, bbox.y0), width=bbox.width, height=bbox.height)
+
+
+    
     def Clear_White(self, blit=False):
         rect = Rectangle(xy=(0,0), width=1, height=1, fc="white", fill=True)
         self.bg_ax.add_patch(rect)
@@ -285,7 +338,34 @@ class MDFPlotter:
         self.bg_ax.patches[-1].remove()
         if blit:
             self.fig.canvas.blit()
+
+    
+
+    def Clear_InfoAx(self, blit=False):
+        for ax in self.info_axes:
+            for text in ax.texts:
+                self.Clear_Arb(text)
+        if blit:
+            self.fig.canvas.blit()
         
+    def Draw_InfoAx(self, blit=False):
+        for i, ax in enumerate(self.info_axes):
+            data = self.ValuesAtVCursor[i]
+            text = self.info_value_texts[i]
+            text.set_text( str(data) )
+            if data is None:
+                text.set_visible(False)
+            else:
+                text.set_visible(True)
+            for text in ax.texts:
+                ax.draw_artist(text)
+        if blit:
+            self.fig.canvas.blit()
+        
+    def Refresh_InfoAx(self, blit=True):
+        self.Clear_InfoAx()
+        self.Draw_InfoAx(blit)
+    
     def Draw_Alls(self, blit=False):
         for ax in self.fig.axes:
             # texts
@@ -315,7 +395,7 @@ class MDFPlotter:
         left = self.main_axes[0].get_window_extent().x0
         width = self.main_axes[0].get_window_extent().width
 
-        self.DrwaRect(xy=(left, bottom), width=width, height=height)
+        self.DrawRect(xy=(left, bottom), width=width, height=height)
         # clear xaxis
         ax = self.main_axes[-1]
         xtick_x0 = ax.get_xticklabels()[0].get_window_extent().x0
@@ -324,33 +404,11 @@ class MDFPlotter:
         xtick_y0 = ax.get_xticklabels()[0].get_window_extent().y0
         xtick_y1 = ax.get_xticklabels()[-1].get_window_extent().y0 + ax.get_xticklabels()[-1].get_window_extent().height
         xtick_height = xtick_y1 - xtick_y0
-        self.DrwaRect(xy=(xtick_x0, xtick_y0), width=xtick_width, height=xtick_height)
+        self.DrawRect(xy=(xtick_x0, xtick_y0), width=xtick_width, height=xtick_height)
         if blit:
             self.fig.canvas.blit()
     
-    def DrwaRect(self, xy, width, height, fc="white", ec=None, lw=None, **kwargs):
-        # # xy must be the screen xy pixels of fig
-        # convert xy and w/h to xlim of bg_ax
-        ## get fig size
-        dpi = self.fig.get_dpi()
-        figwidth = self.fig.get_figwidth() * dpi
-        figheight = self.fig.get_figheight() * dpi
-        ## convert
-        xy_ = (
-            xy[0] / figwidth,
-            xy[1] / figheight
-        )
-        width_ = width / figwidth
-        height_ = height / figheight
-        # make rect
-        rect = Rectangle(xy=xy_, width=width_, height=height_, fc=fc, ec=ec, lw=lw, **kwargs)
-        # add to bg
-        self.bg_ax.add_patch(rect)
-        # drawing
-        self.fig.draw_artist(rect)
-        # remove rect from bg_ax
-        self.bg_ax.patches[-1].remove()
-    
+   
     
     def Draw_Xs(self, blit=False):
         # main, foot, head, info, anno
@@ -386,11 +444,13 @@ class MDFPlotter:
         )
         print(d)
         #self.anno_ax.draw_artist(self.vcursor)
-
+    
+    
     def onClick(self, e):
         if e.inaxes == self.anno_ax:
             self.SetVCursor(e.xdata)
             self.Refresh_Alls()
+            self.Refresh_InfoAx()
         return True
         #self.FILLWHITE()
         self.CLEARPLOTAREAS()
@@ -399,7 +459,7 @@ class MDFPlotter:
         #self.fig.draw_artist(ax.xaxis)
         
         bbox = ax.xaxis.get_tightbbox(self.fig.canvas.get_renderer())
-        self.DrwaRect(xy=(bbox.x0, bbox.y0), width=bbox.width, height=bbox.height, fc=None, ec="red", lw=1, fill=False)
+        self.DrawRect(xy=(bbox.x0, bbox.y0), width=bbox.width, height=bbox.height, fc=None, ec="red", lw=1, fill=False)
         
     
 
@@ -409,7 +469,7 @@ class MDFPlotter:
         xtick_y0 = ax.get_xticklabels()[0].get_window_extent().y0
         xtick_y1 = ax.get_xticklabels()[-1].get_window_extent().y0 + ax.get_xticklabels()[-1].get_window_extent().height
         xtick_height = xtick_y1 - xtick_y0
-        self.DrwaRect(xy=(xtick_x0, xtick_y0), width=xtick_width, height=xtick_height, fill=False, ec="green", lw=1)
+        self.DrawRect(xy=(xtick_x0, xtick_y0), width=xtick_width, height=xtick_height, fill=False, ec="green", lw=1)
 
         print(xtick_x0)
 
@@ -418,11 +478,11 @@ class MDFPlotter:
         y0 = ax.get_xticklabels()[0].get_window_extent().y0
         width = ax.get_xticklabels()[0].get_window_extent().width
         height = ax.get_xticklabels()[0].get_window_extent().height
-        self.DrwaRect(xy=(x0, y0), width=width, height=height, fill=False, ec="red", lw=1)
+        self.DrawRect(xy=(x0, y0), width=width, height=height, fill=False, ec="red", lw=1)
 
 
         bbox = ax.get_tightbbox(self.fig.canvas.get_renderer(), call_axes_locator=True, for_layout_only=True)
-        self.DrwaRect(xy=(bbox.x0, bbox.y0), width=bbox.width, height=bbox.height, fc=None, ec="blue", lw=1, fill=False)
+        self.DrawRect(xy=(bbox.x0, bbox.y0), width=bbox.width, height=bbox.height, fc=None, ec="blue", lw=1, fill=False)
         
         self.fig.canvas.blit()
 
@@ -508,5 +568,24 @@ class MDFPlotter:
         self.fig.canvas.mpl_connect("draw_event", self.onDraw)
         self.fig.canvas.mpl_connect("resize_event", self.onResize)
 
+def find_nearest_index_bisection(data_list, hook_value, eps=0.5):
+    idx = bisect.bisect(data_list, hook_value)
+    return idx
+    if idx >= 0 and idx <= len(data_list) - 1 and data_list[idx] == hook_value:
+        return idx
+    neis = [float("inf"), float("inf"), float("inf")]
+    if idx > 0:
+        neis[0] = abs(data_list[idx-1] - hook_value)
+    if idx >= 0 and idx <= len(data_list) - 1:
+        neis[1] = abs(data_list[idx] - hook_value)
+    if idx < len(data_list) - 1:
+        neis[2] = abs(data_list[idx+1] - hook_value)
+    nearest_idx = idx + neis.index(min(neis)) - 1
+    if abs(data_list[nearest_idx] - hook_value) <= eps:
+        print(nearest_idx)
+        return nearest_idx
+    else:
+        print(None)
+        return None
 
 plter = MDFPlotter(mdfpath="sample.dat")
