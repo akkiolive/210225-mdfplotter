@@ -130,7 +130,7 @@ class Interactor:
                     def __init__(self, root):
                         self.frame = tk.Frame(root)
                         self.buttonOK = tk.Button(self.frame, text="OK", command=ret_action)
-                        self.buttonCancel = tk.Button(self.frame, text="Cancel", command=lambda: root.quit())
+                        self.buttonCancel = tk.Button(self.frame, text="Cancel", command=lambda: root.destroy())
                         self.buttonOK.grid(row=0, column=0, sticky=tk.S)
                         self.buttonCancel.grid(row=0, column=1, sticky=tk.S)
                         self.frame.pack(anchor=tk.S, fill=tk.BOTH, expand=False, padx=5, pady=0)

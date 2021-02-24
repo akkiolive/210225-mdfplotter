@@ -153,7 +153,11 @@ class MDFPlotter:
             "control": False,
             "shift": False,
             "alt": False,
-            "r": False
+            "r": False,
+            "t": False,
+            "y": False,
+            "u": False,
+            "i": False,
         }
         self.connect()
         ## set fonts
@@ -177,6 +181,7 @@ class MDFPlotter:
         self.info_axes = []
         self.info_value_texts = []
         self.vcursor_x = 0
+        self.MyAnnotations = []
         self.make_axes()
 
         
@@ -456,6 +461,10 @@ class MDFPlotter:
         #self.anno_ax.draw_artist(self.vcursor)
     
     
+    def AddAnnotation(self):
+        pass
+
+
     def onClick(self, e):
         self.click = True
         if e.inaxes == self.anno_ax:
@@ -463,40 +472,6 @@ class MDFPlotter:
             self.set_values_at_vcursor(e.xdata)
             self.Refresh_Alls()
         return True
-        #self.FILLWHITE()
-        self.CLEARPLOTAREAS()
-        ax = self.main_axes[-1]
-        ax.plot([1,2,3,4], [2,34,5,6])
-        #self.fig.draw_artist(ax.xaxis)
-        
-        bbox = ax.xaxis.get_tightbbox(self.fig.canvas.get_renderer())
-        self.DrawRect(xy=(bbox.x0, bbox.y0), width=bbox.width, height=bbox.height, fc=None, ec="red", lw=1, fill=False)
-        
-    
-
-        xtick_x0 = ax.get_xticklabels()[0].get_window_extent().x0
-        xtick_x1 = ax.get_xticklabels()[-1].get_window_extent().x0 + ax.get_xticklabels()[-1].get_window_extent().width
-        xtick_width = xtick_x1 - xtick_x0
-        xtick_y0 = ax.get_xticklabels()[0].get_window_extent().y0
-        xtick_y1 = ax.get_xticklabels()[-1].get_window_extent().y0 + ax.get_xticklabels()[-1].get_window_extent().height
-        xtick_height = xtick_y1 - xtick_y0
-        self.DrawRect(xy=(xtick_x0, xtick_y0), width=xtick_width, height=xtick_height, fill=False, ec="green", lw=1)
-
-        print(xtick_x0)
-
-    
-        x0 = ax.get_xticklabels()[0].get_window_extent().x0
-        y0 = ax.get_xticklabels()[0].get_window_extent().y0
-        width = ax.get_xticklabels()[0].get_window_extent().width
-        height = ax.get_xticklabels()[0].get_window_extent().height
-        self.DrawRect(xy=(x0, y0), width=width, height=height, fill=False, ec="red", lw=1)
-
-
-        bbox = ax.get_tightbbox(self.fig.canvas.get_renderer(), call_axes_locator=True, for_layout_only=True)
-        self.DrawRect(xy=(bbox.x0, bbox.y0), width=bbox.width, height=bbox.height, fc=None, ec="blue", lw=1, fill=False)
-        
-        self.fig.canvas.blit()
-
 
     def onClickRelease(self, e):
         print(e)
@@ -512,15 +487,39 @@ class MDFPlotter:
 
         # set ranges
         if e.button == "down":
-            ax.set_xlim(
-                xlim[0] + (xlim[1]-xlim[0]) * 0.3,
-                xlim[1] + (xlim[1]-xlim[0]) * 0.3,
-            )
+            if self.press_keys["control"]:
+                if self.vcursor.get_visible() and self.vcursor_x >= xlim[0] and self.vcursor_x <= xlim[1]:
+                    ax.set_xlim(
+                        xlim[0] - (self.vcursor_x - xlim[0]) * 0.3, 
+                        xlim[1] + (xlim[1] - self.vcursor_x) * 0.3
+                    )
+                else:
+                    ax.set_xlim(
+                        xlim[0] - (xlim[1]-xlim[0]) * 0.3,
+                        xlim[1] + (xlim[1]-xlim[0]) * 0.3,
+                    )
+            else:
+                ax.set_xlim(
+                    xlim[0] + (xlim[1]-xlim[0]) * 0.3,
+                    xlim[1] + (xlim[1]-xlim[0]) * 0.3,
+                )
         elif e.button == "up":
-            ax.set_xlim(
-                xlim[0] - (xlim[1]-xlim[0]) * 0.3,
-                xlim[1] - (xlim[1]-xlim[0]) * 0.3,
-            )
+            if self.press_keys["control"]:
+                if self.vcursor.get_visible() and self.vcursor_x >= xlim[0] and self.vcursor_x <= xlim[1]:
+                    ax.set_xlim(
+                        xlim[0] + (self.vcursor_x - xlim[0]) * 0.3, 
+                        xlim[1] - (xlim[1] - self.vcursor_x) * 0.3
+                    )
+                else:
+                    ax.set_xlim(
+                        xlim[0] + (xlim[1]-xlim[0]) * 0.3,
+                        xlim[1] - (xlim[1]-xlim[0]) * 0.3,
+                    )
+            else:
+                ax.set_xlim(
+                    xlim[0] - (xlim[1]-xlim[0]) * 0.3,
+                    xlim[1] - (xlim[1]-xlim[0]) * 0.3,
+                )
         self.xlim = list(self.main_axes[-1].get_xlim())
         
         # set anno ax
@@ -543,7 +542,7 @@ class MDFPlotter:
             self.press_keys[key] = True
             if key == "ctrl":
                 self.press_keys["control"] = True
-        if self.press_keys["control"] and self.press_keys["r"]:
+        if self.press_keys["r"]:
             self.press_keys["control"] = False
             self.press_keys["r"] = False
             inter = Interactor()
@@ -552,7 +551,24 @@ class MDFPlotter:
                 print(ret[1])
                 self.set_plot_signals(ret[1])
                 self.Refresh_Alls()
-        elif e.key == "f5":
+        elif self.press_keys["t"]:
+            pass
+        elif self.press_keys["y"]:
+            for ax in self.main_axes:
+                for line in ax.lines:
+                    if line.get_marker() == "None":
+                        print("marker set")
+                        line.set_marker("o")
+                        line.set_markersize(3)
+                    else:
+                        print("marker unset")
+                        line.set_marker("None")
+            self.Refresh_Alls()
+        elif self.press_keys["u"]:
+            pass
+        elif self.press_keys["i"]:
+            pass
+        elif self.press_keys["f5"]:
             self.fig.canvas.draw()
 
     def onKeyRelease(self, e):
