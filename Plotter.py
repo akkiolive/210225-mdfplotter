@@ -141,7 +141,7 @@ class MDFPlotter:
 
 
         # matplotlib
-        self.fig = plt.figure()
+        self.fig = plt.figure(figsize=(10, 4.8))
         ## connct events
         self.click = False
         self.click_button = {
@@ -176,11 +176,10 @@ class MDFPlotter:
         self.main_axes = []
         self.info_axes = []
         self.info_value_texts = []
+        self.vcursor_x = 0
         self.make_axes()
 
-        # set dummy vcursor
-        self.vcursor = self.anno_ax.axvline(0, lw=0.9, c="red")
-        self.vcursor.set_visible(False)
+        
 
         ## draw
         self.fig.canvas.draw()
@@ -216,7 +215,7 @@ class MDFPlotter:
     def make_axes(self, xlim=None):
         # grid spec
         nrows = self.PlotSignalNum + 2
-        gs = GridSpec(ncols=2, nrows=nrows, height_ratios=[0.2]+[1]*self.PlotSignalNum+[0.2], width_ratios=[0.1, 0.9], left=0.02, right=0.98, top=0.97, bottom=0.03, wspace=0.1)
+        gs = GridSpec(ncols=2, nrows=nrows, height_ratios=[0.2]+[1]*self.PlotSignalNum+[0.2], width_ratios=[0.1, 0.9], left=0.2, right=0.98, top=0.97, bottom=0.03, wspace=0.2)
         # foot ax
         self.foot_ax = self.fig.add_subplot(gs[-1,1])
         # head ax
@@ -245,11 +244,21 @@ class MDFPlotter:
             ax = self.fig.add_subplot(gs[i+1, 0])
             self.info_axes.append(ax)            
             ax.annotate(plot_signal.name, xy=(1,1), size=10, horizontalalignment="right", va="top", color=plot_signal.color)
-            text = ax.annotate(str(self.ValuesAtVCursor[i]), xy=(1,0.5), ha="right", va="center", color=plot_signal.color)
+            text = ax.annotate(str(self.ValuesAtVCursor[i]), xy=(1,1), size=10, ha="right", va="top", color=plot_signal.color)
             self.info_value_texts.append(text)
             text.set_visible(False)
         # anno ax
+        remain_vcursor_visible = False
+        try:
+            self.anno_ax.remove()
+            remain_vcursor_visible = True
+        except:
+            pass
         self.anno_ax = self.fig.add_subplot(gs[1:-1, 1], sharex=self.foot_ax)
+        # set dummy vcursor
+        self.vcursor = self.anno_ax.axvline(self.vcursor_x, lw=0.9, c="red")
+        self.vcursor.set_visible(remain_vcursor_visible)
+
         # lim
         if xlim:
             self.foot_ax.set_xlim(xlim)
@@ -282,18 +291,19 @@ class MDFPlotter:
         self.make_axes(xlim=xlim)    
 
     
-    def get_values_at_vcursor(self, refresh=True):
+    def set_values_at_vcursor(self, timestamp):
         self.ValuesAtVCursor = []
-        for i, plot_signal in enumerate(self.PlotSignals):
-            signal = plot_signal.signal
-            idx = find_nearest_index_bisection(signal.timestamp, self.vcursor_x)
-            if idx:
-                value = signal.samples[idx]
+        for i, text in enumerate(self.info_value_texts):
+            signal = self.PlotSignals[i].signal
+            idx = find_nearest_index_bisection(signal.timestamps, timestamp)
+            data = signal.samples[idx]
+            self.ValuesAtVCursor.append(data)
+            text.set_text( "\n="+str(data) )
+            if data is None:
+                text.set_visible(False)
             else:
-                value = None
-            self.ValuesAtVCursor.append(value)
-        if refresh:
-            self.Refresh_InfoAx()
+                text.set_visible(True)
+        
 
 
     def DrawRect(self, xy, width, height, fc="white", ec=None, lw=None, **kwargs):
@@ -447,10 +457,11 @@ class MDFPlotter:
     
     
     def onClick(self, e):
+        self.click = True
         if e.inaxes == self.anno_ax:
             self.SetVCursor(e.xdata)
+            self.set_values_at_vcursor(e.xdata)
             self.Refresh_Alls()
-            self.Refresh_InfoAx()
         return True
         #self.FILLWHITE()
         self.CLEARPLOTAREAS()
@@ -489,6 +500,8 @@ class MDFPlotter:
 
     def onClickRelease(self, e):
         print(e)
+        self.click = False
+        
 
     def onScroll(self, e):
         print(e)
@@ -519,7 +532,11 @@ class MDFPlotter:
 
     def onMouseMove(self, e):
         print(e)
-
+        if self.click == True and e.inaxes == self.anno_ax:
+            self.SetVCursor(e.xdata)
+            self.set_values_at_vcursor(e.xdata)
+            self.Refresh_Alls()
+        
     def onKeyPress(self, e):
         print(e, e.key)
         for key in e.key.split("+"):
