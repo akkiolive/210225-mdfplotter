@@ -68,12 +68,9 @@ class MDFPlotter:
         ax.xaxis.set_visible(False)
         ax.yaxis.set_visible(False)
 
-        ## set info ax
-        self.info_axes = []
-        self.set_info_axes()
-
-        ## set main ax
+        ## set axes
         self.main_axes = []
+        self.info_axes = []
         self.set_main_axes()
 
         ## draw line
@@ -92,10 +89,14 @@ class MDFPlotter:
         
 
     def set_main_axes(self):
+        # grid spec
         nrows = self.PlotSignalNum + 2
-        gs = GridSpec(ncols=2, nrows=nrows, width_ratios=[0.1, 0.9], left=0.2, right=0.8, top=0.8, bottom=0.2)
+        gs = GridSpec(ncols=2, nrows=nrows, width_ratios=[0.1, 0.9], left=0.02, right=0.98, top=0.97, bottom=0.03)
+        # head ax
         self.head_ax = self.fig.add_subplot(gs[0,1])
+        # foot ax
         self.foot_ax = self.fig.add_subplot(gs[-1,1])
+        # main axes
         for ax in self.main_axes:
             ax.remove()
         for i, signal_name in enumerate(self.PlotSignalNames):
@@ -105,18 +106,17 @@ class MDFPlotter:
             ax.spines["top"].set_visible(False)
             ax.spines["bottom"].set_visible(False)
             ax.xaxis.set_visible(False)
-        
-
-            
-
-    def set_info_axes(self):
-        nrows = self.PlotSignalNum + 2
-        gs = GridSpec(ncols=2, nrows=nrows, width_ratios=[0.1, 0.9], left=0.2, right=0.8, top=0.8, bottom=0.2)
+        # info axes
         for ax in self.info_axes:
             ax.remove()
         for i, signal_name in enumerate(self.PlotSignalNames):
             ax = self.fig.add_subplot(gs[i+1, 0])
-            self.info_axes.append(ax)
+            self.info_axes.append(ax)            
+            ax.annotate(signal_name, xy=(1,0.5), size=9, horizontalalignment="right", va="top")
+        # anno ax
+        self.anno_ax = self.fig.add_subplot(gs[1:-1, 1])
+        # set property of other than main axes
+        for ax in [self.head_ax, self.foot_ax, self.anno_ax] + self.info_axes:
             ax.patch.set_visible(False)
             ax.spines["left"].set_visible(False)
             ax.spines["right"].set_visible(False)
@@ -124,6 +124,8 @@ class MDFPlotter:
             ax.spines["bottom"].set_visible(False)
             ax.xaxis.set_visible(False)
             ax.yaxis.set_visible(False)
+            
+
 
             
 
@@ -139,17 +141,17 @@ class MDFPlotter:
         self.fig.canvas.blit()
     
     def Draw_Alls(self):
-        		
-		for num, ax in enumerate(self.main_axes):
-			ax.patch.set_visible(False)
-			#ax.spines["left"].set_visible(False)
-			ax.spines["right"].set_visible(False)
-			ax.spines["top"].set_visible(False)
-			ax.spines["bottom"].set_visible(False)
-			if num != len(self.main_axes) - 1:
-				ax.xaxis.set_visible(False)
-		self.fig.canvas.draw()
-		self.REDRAWALL()
+                
+        for num, ax in enumerate(self.main_axes):
+            ax.patch.set_visible(False)
+            #ax.spines["left"].set_visible(False)
+            ax.spines["right"].set_visible(False)
+            ax.spines["top"].set_visible(False)
+            ax.spines["bottom"].set_visible(False)
+            if num != len(self.main_axes) - 1:
+                ax.xaxis.set_visible(False)
+        self.fig.canvas.draw()
+        self.REDRAWALL()
 
     def onClick(self, e):
         print(e)
@@ -274,4 +276,4 @@ class MDFPlotter:
         self.fig.canvas.mpl_connect("resize_event", self.onResize)
 
 
-plter = MDFPlotter(mdfpath=sys.argv[1])
+plter = MDFPlotter(mdfpath="sample.dat")
